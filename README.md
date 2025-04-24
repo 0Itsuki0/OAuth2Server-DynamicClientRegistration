@@ -9,7 +9,7 @@ This repository includes
 
 ![](./demo.gif)
 
-For more details, please refer to my article (NodeJs/Typescript: OAuth2 Server with Express (Specification & Implementation!))[].
+For more details, please refer to my article (NodeJs/Typescript: OAuth2 Server with Express (Specification & Implementation))[https://medium.com/@itsuki.enjoy/nodejs-typescript-oauth2-server-with-express-specification-implementation-de14ed081182].
 
 
 ## Server

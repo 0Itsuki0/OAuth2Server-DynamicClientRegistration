@@ -46,13 +46,13 @@ async function getAuthorizationCode(authorizationCode: string): Promise<Authoriz
 
     const code = AUTH_CODE_TABLE.find(c => c.authorizationCode === authorizationCode)
     if (!code) {
-        throw new Error("Authorization code not found")
+        throw new Error("Authorization code not found", { cause: "invalid_grant" })
     }
 
     const client = await getClient(code.clientId)
     const user = await _getUser(code.userId)
     if (!client || !user) {
-        throw new Error("Client or user is not found for the authorization code")
+        throw new Error("Client or user is not found for the authorization code", { cause: "invalid_grant" })
     }
 
     return toCode(code, client, user)
@@ -94,11 +94,11 @@ async function getClient(clientId: string, clientSecret?: string): Promise<Clien
 
     const client = CLIENT_TABLE.find(c => c.clientId === clientId)
     if (!client) {
-        throw new Error("Client not found")
+        throw new Error("Client not found", { cause: "invalid_client" })
     }
     if (clientSecret !== undefined && clientSecret !== null ) {
         if (client.clientSecret !== clientSecret) {
-            throw new Error("Invalid Client Secret.")
+            throw new Error("Invalid Client Secret.", { cause: "invalid_client" })
         }
     }
     return toClient(client)
@@ -146,13 +146,13 @@ async function getAccessToken(accessToken: string): Promise<Token> {
 
     const token = ACCESS_TOKEN_TABLE.find(t => t.accessToken === accessToken)
     if (!token) {
-        throw new Error("Access token not found")
+        throw new Error("Access token not found", { cause: "invalid_grant" })
     }
 
     const client = await getClient(token.clientId)
     const user = await _getUser(token.userId)
     if (!client || !user) {
-        throw new Error("Client or user is not found for the access token")
+        throw new Error("Client or user is not found for the access token", { cause: "invalid_grant" })
     }
 
     return toAccessToken(token, client, user, undefined)
@@ -175,12 +175,12 @@ async function getRefreshToken(refreshToken: string): Promise<RefreshToken> {
 
     const token = REFRESH_TOKEN_TABLE.find(t => t.refreshToken === refreshToken)
     if (!token) {
-        throw new Error("Refresh token not found")
+        throw new Error("Refresh token not found", { cause: "invalid_grant" })
     }
     const client = await getClient(token.clientId)
     const user = await _getUser(token.userId)
     if (!client || !user) {
-        throw new Error("Client or user is not found for the refresh token")
+        throw new Error("Client or user is not found for the refresh token", { cause: "invalid_grant" })
 
     }
     return toRefreshToken(token, client, user)
@@ -205,7 +205,7 @@ async function getUser(email: string, password: string, clientId: string): Promi
 
     const user = USER_TABLE.find(u => u.email === email && u.password === password && u.clientId === clientId)
     if (!user) {
-        throw new Error("User not found")
+        throw new Error("User not found", { cause: "invalid_request" })
     }
 
     return toUser(user)
@@ -217,7 +217,7 @@ async function _getUser(userId: string): Promise<User> {
 
     const user = USER_TABLE.find(u => u.userId === userId)
     if (!user) {
-        throw new Error("User not found")
+        throw new Error("User not found", { cause: "invalid_request" })
     }
 
     return toUser(user)
@@ -353,13 +353,15 @@ export async function handleGetAuthorize(req: Request, res: Response) {
     const redirectUri = req.query.redirect_uri
     if (!redirectUri) {
         const errorMessage = "Missing `redirect_uri`."
-        res.redirect(`${OAUTH_ROUTER_ENDPOINT}${OTHER_ERROR_ENDPOINT}?error=${errorMessage}`)
+        const error = "invalid_request"
+        res.redirect(`${OAUTH_ROUTER_ENDPOINT}${OTHER_ERROR_ENDPOINT}?error=${error}&error_description=${errorMessage}`)
         return
     }
 
     if (typeof(redirectUri) !== "string") {
         const errorMessage = "Invalid parameter: `redirect_uri`."
-        res.redirect(`${OAUTH_ROUTER_ENDPOINT}${OTHER_ERROR_ENDPOINT}?error=${errorMessage}`)
+        const error = "invalid_request"
+        res.redirect(`${OAUTH_ROUTER_ENDPOINT}${OTHER_ERROR_ENDPOINT}?error=${error}&error_description=${errorMessage}`)
         return
     }
 
@@ -367,27 +369,27 @@ export async function handleGetAuthorize(req: Request, res: Response) {
 
         const clientId = req.query.client_id
         if (!clientId) {
-            throw new Error("Missing parameter: `client_id`")
+            throw new Error("Missing parameter: `client_id`", { cause: "invalid_request" })
         }
 
         if (typeof(clientId) !== "string") {
-            throw new Error("Invalid parameter: `client_id`")
+            throw new Error("Invalid parameter: `client_id`", { cause: "invalid_request" })
         }
 
         const response_type = req.query.response_type
         if (!response_type) {
-            throw new Error("Missing parameter: `response_type`")
+            throw new Error("Missing parameter: `response_type`", { cause: "invalid_request" })
         }
 
         if (typeof(response_type) !== "string") {
-            throw new Error("Invalid parameter: `response_type`")
+            throw new Error("Invalid parameter: `response_type`", { cause: "invalid_request" })
         }
 
         // checkif state of code_challenge if present if
         const state = req.query.state as string | undefined
         const codeChallenge = req.query.code_challenge as string | undefined
         if (!state && !codeChallenge) {
-            throw new Error("Either `state` or `code_challenge` is required to ensure security.")
+            throw new Error("Either `state` or `code_challenge` is required to ensure security.", { cause: "invalid_request" })
         }
 
         const fullURL = new URL(`${req.protocol}://${req.host}${req.originalUrl}`)
@@ -400,7 +402,12 @@ export async function handleGetAuthorize(req: Request, res: Response) {
     } catch (error) {
         console.log(error)
         const url = new URL(redirectUri)
-        url.searchParams.append("error", "invalid_request")
+        if (error instanceof Error) {
+            url.searchParams.append("error",  (error.cause as string | undefined ) ?? "invalid_request")
+            url.searchParams.append("error_description",  error.message)
+        } else {
+            url.searchParams.append("error",  "invalid_request")
+        }
         res.redirect(url.href)
         return
     }
@@ -432,27 +439,27 @@ export async function handlePostAuthorize(req: Request, res: Response) {
         const email = (req.body?.email || req.query.email) as string | undefined
         const password = (req.body?.password || req.query.password) as string | undefined
         if (!password || !email) {
-            throw new Error("Missing `email` or `password`.")
+            throw new Error("Missing `email` or `password`.", { cause: "invalid_request" })
         }
 
         if (typeof(password) !== "string" || typeof(email) !== "string" ) {
-            throw new Error("Invalid `email` or `password`.`")
+            throw new Error("Invalid `email` or `password`.`", { cause: "invalid_request" })
         }
 
         const clientId = req.query.client_id
         if (!clientId) {
-            throw new Error("Missing parameter: `client_id`")
+            throw new Error("Missing parameter: `client_id`", { cause: "invalid_request" })
         }
 
         if (typeof(clientId) !== "string") {
-            throw new Error("Invalid parameter: `client_id`")
+            throw new Error("Invalid parameter: `client_id`", { cause: "invalid_request" })
         }
 
         const client = CLIENT_TABLE.find(c => c.clientId === clientId)
 
         // client does not exist
         if (!client) {
-            throw new Error("Client not found.")
+            throw new Error("Client not found.", { cause: "invalid_request" })
         }
         if (!client.redirectUris.find(u => u === redirectUri)) {
             // inform the resource owner (user) instead of sending to the redirect uri
@@ -492,8 +499,8 @@ export async function handlePostAuthorize(req: Request, res: Response) {
         if (error instanceof UnauthorizedRequestError) {
             url.searchParams.append("error", "unauthorized_client")
         } else if (error instanceof Error) {
-            url.searchParams.append("error", `${error.cause ?? "invalid_request"}`)
-            url.searchParams.append("error_description", error.message)
+            url.searchParams.append("error",  (error.cause as string | undefined ) ?? "invalid_request")
+            url.searchParams.append("error_description",  error.message)
         } else {
             url.searchParams.append("error", "invalid_request")
         }
@@ -520,11 +527,11 @@ export async function handlePostToken(req: Request, res: Response) {
     try {
         const clientId = req.body.client_id
         if (!clientId) {
-            throw new Error("Missing parameter: `client_id`")
+            throw new Error("Missing parameter: `client_id`", { cause: "invalid_request" })
         }
 
         if (typeof(clientId) !== "string") {
-            throw new Error("Invalid parameter: `client_id`")
+            throw new Error("Invalid parameter: `client_id`", { cause: "invalid_request" })
         }
 
         const client = await getClient(clientId)
@@ -554,7 +561,8 @@ export async function handlePostToken(req: Request, res: Response) {
     } catch(error) {
         console.log(error)
         if (error instanceof Error) {
-            res.status(400).json({
+            const cause = (error.cause as string | undefined) ?? "invalid_request"
+            res.status(cause == "invalid_client" ? 401 : 400).json({
                 error: error.cause ?? "invalid_request",
                 error_description: error.message
             })
@@ -568,6 +576,8 @@ export async function handlePostToken(req: Request, res: Response) {
     }
 }
 
+// error response specificaiton: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-12#name-error-response-3
+// www-authenticate header: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-12#section-5.3.1
 export async function authenticateMiddleware(req: Request, res: Response, next: NextFunction, requiredScope?: string[]) {
 
     try {
@@ -588,19 +598,23 @@ export async function authenticateMiddleware(req: Request, res: Response, next: 
         console.log(error)
 
         if (error instanceof UnauthorizedRequestError) {
-            res.setHeader("WWW-Authenticate", `Bearer ${requiredScope ? `scope=${requiredScope}, ` : ""}error=${error.cause ?? "invalid_request"}, error_description=${error.message}`)
-            res.sendStatus(error.code)
+            res.setHeader("WWW-Authenticate", `Bearer ${requiredScope ? `scope=${requiredScope.join(" ")}, ` : ""}error=${error.cause ?? "invalid_request"}, error_description=${error.message}`)
+            res.sendStatus(401)
             return
         }
 
         if (error instanceof Error) {
-            res.setHeader("WWW-Authenticate", `Bearer error=${error.cause ?? "invalid_request"}, error_description=${error.message}`)
+            const cause = (error.cause as string | undefined) ?? "invalid_request"
+            const code = cause == "invalid_token" ? 401 : cause == "insufficient_scope" ? 403 : 400
+            res.setHeader("WWW-Authenticate", `Bearer ${requiredScope ? `scope=${requiredScope.join(" ")}, ` : ""}error=${cause}, error_description=${error.message}`)
+            res.sendStatus(code)
+            return
         } else {
             res.setHeader("WWW-Authenticate", `Bearer error=unknown_error`)
+            res.sendStatus(400)
+            return
         }
 
-        res.sendStatus(403)
-        return
     }
 
 }
@@ -612,7 +626,7 @@ export async function handleGetProtectedEndpoint(req: Request, res: Response) {
         const userId = req.token?.user?.userId
 
         if (!userId) {
-            throw new Error("user not found")
+            throw new Error("user not found", { cause: "invalid_request" })
         }
 
         const user = await _getUser(userId)
@@ -622,11 +636,17 @@ export async function handleGetProtectedEndpoint(req: Request, res: Response) {
 
     } catch(error) {
         console.log(error)
-
-        res.status(400).json({
-            error: "bad_request",
-            error_description: `${error}`
-        })
+        if (error instanceof Error) {
+            res.status(400).json({
+                error: (error.cause as string | undefined) ?? "invalid_request",
+                error_description: error.message
+            })
+        } else {
+            res.status(400).json({
+                error: "invalid_request",
+                error_description: `${error}`
+            })
+        }
 
         return
     }
