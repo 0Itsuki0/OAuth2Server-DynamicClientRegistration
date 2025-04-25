@@ -98,19 +98,15 @@ async function refreshToken(refreshToken: string): Promise<client.TokenEndpointR
 }
 
 
-async function getPrivateEndpoint(accessToken: string): Promise<{[key: string]: string}> {
-    const headers = {
-        'Authorization': `Bearer ${accessToken}`
+async function getProtectedEndpoint(accessToken: string): Promise<{[key: string]: string}> {
+    if (!config) {
+        throw new Error("initializeAuthClient is not initialized.")
     }
-
-    const response = await fetch(`${SERVER_HOST}:${SERVER_PORT}${PRIVATE_INFO_ENDPOINT}`, {
-        headers: headers
-    })
+    const response = await client.fetchProtectedResource(config, accessToken, new URL(`${SERVER_HOST}:${SERVER_PORT}${PRIVATE_INFO_ENDPOINT}`), "get")
     if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}, ${response.statusText}`)
     }
     const body =  await response.json()
-    console.log("private info endpoint response: ", body)
     return body
 }
 
@@ -185,7 +181,7 @@ export async function launchClient() {
     browser = undefined
     clientExpressApp.close()
 
-    const privateInfo = await getPrivateEndpoint(token.access_token)
+    const privateInfo = await getProtectedEndpoint(token.access_token)
     console.log("private info: ", privateInfo)
 
     await revokeToken(token.access_token)
