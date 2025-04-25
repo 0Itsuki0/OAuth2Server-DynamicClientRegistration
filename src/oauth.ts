@@ -717,6 +717,20 @@ function getClientIdSecret(req: Request): { clientId?: string, clientSecret?: st
 }
 
 
+// grant type and response type relation
+//
+// +-----------------------------------------------+-------------------+
+// | grant_types value includes:                   | response_types    |
+// |                                               | value includes:   |
+// +-----------------------------------------------+-------------------+
+// | authorization_code                            | code              |
+// | implicit                                      | token             |
+// | password                                      | (none)            |
+// | client_credentials                            | (none)            |
+// | refresh_token                                 | (none)            |
+// | urn:ietf:params:oauth:grant-type:jwt-bearer   | (none)            |
+// | urn:ietf:params:oauth:grant-type:saml2-bearer | (none)            |
+// +-----------------------------------------------+-------------------+
 export function getMetadataJson(req: Request, res: Response) {
     const baseURL = `${req.protocol}://${req.host}`
     res.json({
