@@ -11,7 +11,7 @@ It includes
 
 ![](./demo.gif)
 
-For more details, please refer to my article (OAuth2Server With Dynamic Client Registration (Express/Typescript))[].
+For more details, please refer to my article (OAuth2Server With Dynamic Client Registration (Express/Typescript))[https://medium.com/@itsuki.enjoy/oauth2server-with-dynamic-client-registration-express-typescript-922a6c06802a].
 
 
 ## Server
