@@ -144,8 +144,6 @@ async function revokeToken(accessToken: string) {
 }
 
 const app = express()
-app.use(express.json())
-
 
 app.get(CLIENT_CALLBACK_PATH, async (req: Request, res: Response) => {
     console.log("client callback: ", req.url)
