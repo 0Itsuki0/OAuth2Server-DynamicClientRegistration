@@ -19,6 +19,7 @@
     "license": "ISC",
     "dependencies": {
         "@node-oauth/oauth2-server": "^5.2.0",
+        "dotenv": "^16.5.0",
         "ejs": "^3.1.10",
         "express": "^5.1.0",
         "openid-client": "^6.4.2",

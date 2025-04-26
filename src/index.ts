@@ -1,9 +1,9 @@
 import express, { NextFunction, Request, Response } from "express"
-import { authenticateMiddleware, getMetadataJson, handleGetAuthorize, handlePostTokenRevocation as handleGetRevoke, handleGetProtectedEndpoint as handleGetProtectedEndpoint, handlePostAuthorize, handlePostToken, REQUIRED_SCOPE, addDummyData, } from "./oauth.js"
+import { authenticateMiddleware, getMetadataJson, handleGetAuthorize, handlePostTokenRevocation , handleGetProtectedEndpoint, handlePostAuthorize, handlePostToken, handlePostRegistration, } from "./handlers.js"
+import { addDummyData, } from "./oauth.js"
 import { launchClient } from "./sampleClient.js"
-import { AUTHORIZE_ENDPOINT, OAUTH_ROUTER_ENDPOINT, OTHER_ERROR_ENDPOINT, PRIVATE_INFO_ENDPOINT as PROTECTED_ENDPOINT, REVOCATION_ENDPOINT, SERVER_PORT, TOKEN_ENDPOINT } from "./constants.js"
-
-
+import { AUTHORIZE_ENDPOINT, CLIENT_CALLBACK_PATH, CLIENT_HOST, CLIENT_PORT, OAUTH_ROUTER_ENDPOINT, OTHER_ERROR_ENDPOINT, PROTECTED_ENDPOINT, REGISTRATION_ENDPOINT, REQUIRED_SCOPES, REVOCATION_ENDPOINT, SERVER_PORT, TOKEN_ENDPOINT } from "./constants.js"
+import { decryptFromClientId, encryptToClientId } from "./encrypt.js"
 
 
 /*******************************/
@@ -48,7 +48,11 @@ oauthRouter.post(TOKEN_ENDPOINT, async (req: Request, res: Response) => {
 })
 
 oauthRouter.post(REVOCATION_ENDPOINT, async (req: Request, res: Response) => {
-    handleGetRevoke(req, res)
+    handlePostTokenRevocation(req, res)
+})
+
+oauthRouter.post(REGISTRATION_ENDPOINT, async (req: Request, res: Response) => {
+    handlePostRegistration(req, res)
 })
 
 app.use(OAUTH_ROUTER_ENDPOINT, oauthRouter)
@@ -68,7 +72,7 @@ app.get(OPENID_METADATA_ENDPOINT, async (req: Request, res: Response) => {
 
 // some protected resource
 app.get(PROTECTED_ENDPOINT, async (req: Request, res: Response, next: NextFunction) => {
-    await authenticateMiddleware(req, res, next, [REQUIRED_SCOPE])
+    await authenticateMiddleware(req, res, next, REQUIRED_SCOPES)
 }, async (req: Request, res: Response) => {
     handleGetProtectedEndpoint(req, res)
 })
@@ -84,6 +88,7 @@ async function main() {
     // start dummy client
     launchClient().catch((error) => {
         console.error("Fatal error while running client:", error)
+        process.exit(0)
     })
 
     process.on('SIGINT', async () => {

@@ -1,8 +1,8 @@
 import * as client from 'openid-client'
 import express, { Request, Response } from "express"
-import { REQUIRED_SCOPE } from './oauth.js'
+import { REQUIRED_SCOPES } from './constants.js'
 import puppeteer from 'puppeteer'
-import { CLIENT_CALLBACK_PATH, CLIENT_HOST, CLIENT_PORT, CLIENT_SECRET, CLINET_ID, PRIVATE_INFO_ENDPOINT, SERVER_HOST, SERVER_PORT } from './constants.js'
+import { CLIENT_CALLBACK_PATH, CLIENT_HOST, CLIENT_PORT, PROTECTED_ENDPOINT, SERVER_HOST, SERVER_PORT } from './constants.js'
 
 
 let config: client.Configuration | undefined = undefined
@@ -12,24 +12,21 @@ let state: string | undefined = undefined
 let browser: puppeteer.Browser | undefined = undefined
 let token: client.TokenEndpointResponse | undefined = undefined
 
+function redirectURIs(): string {
+    return `${CLIENT_HOST}:${CLIENT_PORT}${CLIENT_CALLBACK_PATH}`
+}
+
 async function initializeAuthClient() {
 
     const serverURL = new URL(`${SERVER_HOST}:${SERVER_PORT}`)
 
-    // this will fail if we have not implemented the OAuth 2.0 Authorization Server Metadata on our server
-    // at .well-known/openid-configuration or .well-known/oauth-authorization-server
-    // Authorization Server Metadata specification: https://datatracker.ietf.org/doc/html/rfc8414
-    config = await client.discovery(
-        serverURL,
-        CLINET_ID,
-        CLIENT_SECRET,
-        undefined,
-
-        // if open client
-        // undefined,
-        // client.None(),
-
-        {
+    config = await client.dynamicClientRegistration(
+        serverURL, {
+            redirect_uris: [redirectURIs()],
+            token_endpoint_auth_method: "client_secret_basic"
+        }, undefined, {
+            // for protected registration, pass in the initialAccessToken here
+            initialAccessToken: undefined,
             // Disable the HTTPS-only restriction for the discovery call
             // Marked as deprecated only to make it stand out
             execute: [client.allowInsecureRequests],
@@ -37,9 +34,36 @@ async function initializeAuthClient() {
             // - oidc  => https://example.com/.well-known/openid-configuration
             // - oauth => https://example.com/.well-known/oauth-authorization-server
             algorithm: "oauth2" //default to oidc
-        },
+        }
     )
 
+    const clientMetadata = config.clientMetadata()
+    console.log("dynamic registration complete")
+    console.log("client_id: ", clientMetadata.client_id)
+    console.log("client_secret: ", clientMetadata.client_secret)
+    console.log("client_id_issued_at: ", clientMetadata.client_id_issued_at)
+    console.log("client_secret_expires_at: ", clientMetadata.client_secret_expires_at)
+
+
+    // for future request if there is any saved ClientId
+    // and in the case of a saved client_secret, secret is not expired
+    // config = await client.disovery(
+    //     serverURL,
+    //     clinetId,
+
+    //     // client with secret
+    //     clientSecret,
+    //     undefined,
+
+    //     // open client
+    //     // undefined,
+    //     // client.None(),
+
+    //     {
+    //         execute: [client.allowInsecureRequests],
+    //         algorithm: "oauth2" //default to oidc
+    //     },
+    // )
 }
 
 
@@ -52,8 +76,8 @@ async function getAuthURL(): Promise<URL> {
     const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier)
 
     const parameters: Record<string, string> = {
-        redirect_uri: `${CLIENT_HOST}:${CLIENT_PORT}${CLIENT_CALLBACK_PATH}`,
-        scope: REQUIRED_SCOPE,
+        redirect_uri: redirectURIs(),
+        scope: REQUIRED_SCOPES.join(" "),
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',
         response_type: "code"
@@ -102,7 +126,7 @@ async function getProtectedEndpoint(accessToken: string): Promise<{[key: string]
     if (!config) {
         throw new Error("initializeAuthClient is not initialized.")
     }
-    const response = await client.fetchProtectedResource(config, accessToken, new URL(`${SERVER_HOST}:${SERVER_PORT}${PRIVATE_INFO_ENDPOINT}`), "get")
+    const response = await client.fetchProtectedResource(config, accessToken, new URL(`${SERVER_HOST}:${SERVER_PORT}${PROTECTED_ENDPOINT}`), "get")
     if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}, ${response.statusText}`)
     }
